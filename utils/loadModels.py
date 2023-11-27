@@ -1,7 +1,9 @@
 import torch
 import torchvision.transforms as transforms
 from os import path
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+from models.FC import FC
 from models.resnet18Cifar10 import ResNetCifar, BasicBlock
 from models.resnet18MNIST import ResNetMNIST, BasicBlock
 from models.resnet18imagenette import ResNetImageNette, BasicBlock
@@ -96,6 +98,22 @@ def vtModels(dataset, models_dir):
         imagenetteNet.load_state_dict(torch.load(fpath, map_location=device))
         imagenetteNet = torch.nn.Sequential(transform_test, imagenetteNet)
         return imagenetteNet
+
+
+def fcModels(dataset, models_dir):
+    if dataset == 'cifar10':
+        fpath = path.join(models_dir, f'FCcifar10.pth')
+        cifarFC = eval(f'FC(3 * 32 * 32, 10)').to(device)
+        cifarFC.load_state_dict(torch.load(fpath, map_location=device))
+        cifarFC = torch.nn.Sequential(cifarNormalization, cifarFC).to(device)
+        return cifarFC
+    elif dataset == 'mnist':
+        fpath = path.join(models_dir, f'FCMnist.pth')
+        mnistFC = eval(f'FC(1 * 28 * 28, 10)').to(device)
+        mnistFC.load_state_dict(torch.load(fpath, map_location=device))
+        return mnistFC
+    else:
+        raise ValueError(f"yet to be implemented")
 
 
 def lcModels(dataset, models_dir):
@@ -248,6 +266,7 @@ model_mapping = {
     'Visual Transformer': vtModels,
     'ResNet18': resnet18Models,
     'Linear Classifier': lcModels,
+    'Fully Connected': fcModels,
     'CNN': cnnModels,
     'ResNet20-TRSEnsemble': resnet20TRSModels,
     'ResNet18-PORT': resnet18PORTModels

@@ -3,24 +3,22 @@ import torch
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 
-class VMIAttack:
-    def __init__(self, model, criterion=torch.nn.CrossEntropyLoss(), num_iters=10, num_variance_iters=20, momentum=0.9, num_classes=10, beta=1.5,
-                 is_VT=False):
+class VMIAttackModified:
+    def __init__(self, model, criterion=torch.nn.CrossEntropyLoss(), num_iters=10, num_variance_iters=20, momentum=0.9, num_classes=10, is_VT=False):
         self.model = model
         self.num_iters = num_iters
         self.num_variance_iters = num_variance_iters
         self.momentum = momentum
         self.num_classes = num_classes
-        self.beta = beta
         self.is_VT = is_VT
         self.criterion = criterion
 
-    def batcGrad(self, x_adv, y, bound: float, grad_size):
+    def batcGrad(self, x_adv, y, alpha, grad_size):
         x_copy = x_adv.clone().detach().to(device)
         global_grad = torch.zeros_like(grad_size).to(device)
         # sampling N examples in the neighborhood of x
         for _ in range(self.num_variance_iters):
-            x_neighbor = x_copy + torch.FloatTensor(x_copy.size()).uniform_(-bound, bound).to(device)
+            x_neighbor = x_copy + torch.FloatTensor(x_copy.size()).uniform_(-alpha, alpha).to(device)
             x_neighbor.requires_grad = True
             outputs = self.model(x_neighbor).to(device)
             if self.is_VT:
@@ -34,7 +32,7 @@ class VMIAttack:
             x_neighbor = x_neighbor.detach().to(device)
         return global_grad
 
-    def runAttack(self, x_inp, y, eps):
+    def runAttack(self, x_inp, y, eps, alphaL2):
         self.model.eval()
         self.model.requires_grad_(False)
         alpha = eps / self.num_iters
@@ -48,7 +46,10 @@ class VMIAttack:
             outputs = self.model(adv_images).to(device)
             if self.is_VT:
                 outputs = outputs.sup
-            loss = self.criterion(outputs, y.to(device))
+            pests = (adv_images - x_copy).to(device)
+            l2Loss = torch.norm(torch.norm(pests, p=2))
+            ceLoss = self.criterion(outputs, y.to(device))
+            loss = ceLoss + alphaL2 * l2Loss
             loss = torch.mean(loss)
             loss.backward()
             new_grad = (adv_images.grad).to(device)
@@ -59,7 +60,7 @@ class VMIAttack:
             noise = (self.momentum * prev_grad + (current_grad / torch.mean(torch.abs(current_grad), dim=[1, 2, 3], keepdim=True))).to(device)
 
             # update the variance
-            global_grad = self.batcGrad(adv_images, y, self.beta * eps, new_grad)
+            global_grad = self.batcGrad(adv_images, y, alpha, new_grad)
             variance = (global_grad / 1. * self.num_variance_iters) - new_grad
 
             # update prev gead
@@ -70,7 +71,5 @@ class VMIAttack:
             adv_images = torch.clamp(adv_images, x_copy - eps, x_copy + eps)
             # Update the adversarial images for the next iteration
             adv_images = torch.clamp(adv_images.detach(), 0, 1).detach()
-            assert torch.all((adv_images >= 0) & (adv_images <= 1)), "Tensor values are not in [0, 1] range."
-            assert torch.all((adv_images >= (x_copy - eps)) & (adv_images <= x_copy + eps)), "Values are not within the specified range."
 
         return adv_images

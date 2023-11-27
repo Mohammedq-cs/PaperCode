@@ -16,7 +16,7 @@ cifarDS = get_dataset('cifar10', 'test')
 loaderCifar = torch.utils.data.DataLoader(cifarDS, batch_size=20, shuffle=False, num_workers=2)
 cifarCNN = getPreTrainedModel('CNN', 'cifar10')
 print("starting experiment 3 CNN ->  ResNet18PORT")
-cifarPORT = getPreTrainedModel('ResNet18-PORT', 'cifar10')
+cifarPORT = getPreTrainedModel('ResNet18-PORT', 'cifar10').to(device)
 exp3filteredDS = filterDataSetForTwoModels(cifarCNN, cifarPORT, loaderCifar, False, False)
 exp3floader = torch.utils.data.DataLoader(exp3filteredDS, batch_size=20, shuffle=False, num_workers=2)
 
